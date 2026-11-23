@@ -1,31 +1,36 @@
 import pytest
 
-from a2.models import GlobalMean, ItemMean, UserMean
+from a2.models import ItemMajority, MajorityClass, UserMajority
 
 TRAIN = [
-    {"user_id": "u1", "book_id": "b1", "rating": 5},
-    {"user_id": "u1", "book_id": "b2", "rating": 3},
-    {"user_id": "u2", "book_id": "b1", "rating": 4},
+    {"user_id": "u1", "item_id": "i1", "fit": "small"},
+    {"user_id": "u1", "item_id": "i1", "fit": "small"},
+    {"user_id": "u2", "item_id": "i2", "fit": "fit"},
+    {"user_id": "u2", "item_id": "i2", "fit": "fit"},
+    {"user_id": "u3", "item_id": "i2", "fit": "fit"},
+    {"user_id": "u3", "item_id": "i3", "fit": "large"},
 ]
 
 
-def test_global_mean():
-    m = GlobalMean().fit(TRAIN)
-    assert m.predict([{}, {}]) == [pytest.approx(4.0)] * 2
+def test_majority_class():
+    assert MajorityClass().fit(TRAIN).predict([{}, {}]) == ["fit", "fit"]
 
 
-def test_global_mean_empty_raises():
+def test_majority_empty_raises():
     with pytest.raises(ValueError):
-        GlobalMean().fit([])
+        MajorityClass().fit([])
 
 
-def test_item_and_user_mean_with_unseen_fallback():
-    item = ItemMean().fit(TRAIN)
-    user = UserMean().fit(TRAIN)
-    assert item.predict([{"book_id": "b1"}, {"book_id": "new"}]) == [pytest.approx(4.5), pytest.approx(4.0)]
-    assert user.predict([{"user_id": "u1"}, {"user_id": "new"}]) == [pytest.approx(4.0), pytest.approx(4.0)]
+def test_item_majority_with_unseen_fallback():
+    m = ItemMajority().fit(TRAIN)
+    assert m.predict([{"item_id": "i1"}, {"item_id": "i3"}, {"item_id": "new"}]) == ["small", "large", "fit"]
 
 
-def test_shrinkage_pulls_towards_global_mean():
-    # b2 has one rating (3); with k=1: (3 + 1*4) / (1 + 1) = 3.5
-    assert ItemMean(shrinkage=1).fit(TRAIN).predict([{"book_id": "b2"}]) == [pytest.approx(3.5)]
+def test_user_majority_tie_prefers_fit():
+    # u3 has one "fit" and one "large" -> tie broken towards "fit"
+    assert UserMajority().fit(TRAIN).predict([{"user_id": "u3"}]) == ["fit"]
+
+
+def test_min_count_falls_back_for_rare_groups():
+    m = ItemMajority(min_count=2).fit(TRAIN)  # i3 seen once
+    assert m.predict([{"item_id": "i3"}, {"item_id": "i1"}]) == ["fit", "small"]

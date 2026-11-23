@@ -1,62 +1,67 @@
-"""Baselines and models. Every model follows the same interface:
+"""Baselines and models for fit prediction. Every model follows the same interface:
 
     model = SomeModel(...).fit(train_rows)
-    preds = model.predict(rows)        # one prediction per row
+    preds = model.predict(rows)        # one label from FIT_LABELS per row
 
 Owners: B (baselines + course models), C (stronger model).
 """
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from a2.data import ITEM_KEY, TARGET_KEY, USER_KEY
 
 
-class GlobalMean:
-    """Trivial baseline: always predict the training-set average."""
+class MajorityClass:
+    """Trivial baseline: always predict the most common training label ("fit")."""
 
     def fit(self, rows):
-        ys = [r[TARGET_KEY] for r in rows]
-        if not ys:
+        counts = Counter(r[TARGET_KEY] for r in rows)
+        if not counts:
             raise ValueError("cannot fit on an empty training set")
-        self.mean_ = sum(ys) / len(ys)
+        self.label_ = counts.most_common(1)[0][0]
         return self
 
     def predict(self, rows):
-        return [self.mean_ for _ in rows]
+        return [self.label_ for _ in rows]
 
 
-class _GroupMean:
+class _GroupMajority:
     key = None
 
-    def __init__(self, shrinkage=0.0):
-        # shrinkage pulls small groups towards the global mean: (sum + k*mu) / (n + k)
-        self.shrinkage = shrinkage
+    def __init__(self, min_count=1):
+        # groups seen fewer than min_count times fall back to the global majority
+        self.min_count = min_count
 
     def fit(self, rows):
-        self.global_ = GlobalMean().fit(rows)
-        sums, counts = defaultdict(float), defaultdict(int)
+        self.fallback_ = MajorityClass().fit(rows)
+        by_group = defaultdict(Counter)
         for r in rows:
-            sums[r[self.key]] += r[TARGET_KEY]
-            counts[r[self.key]] += 1
-        mu, k = self.global_.mean_, self.shrinkage
-        self.means_ = {g: (sums[g] + k * mu) / (counts[g] + k) for g in sums}
+            by_group[r[self.key]][r[TARGET_KEY]] += 1
+        # ties broken by preference: fit > small > large
+        pref = {"fit": 0, "small": 1, "large": 2}
+        self.labels_ = {
+            g: min(c, key=lambda lab: (-c[lab], pref.get(lab, 3)))
+            for g, c in by_group.items()
+            if sum(c.values()) >= self.min_count
+        }
         return self
 
     def predict(self, rows):
-        mu = self.global_.mean_
-        return [self.means_.get(r[self.key], mu) for r in rows]
+        default = self.fallback_.label_
+        return [self.labels_.get(r[self.key], default) for r in rows]
 
 
-class ItemMean(_GroupMean):
-    """Baseline: the item's average rating (global mean for unseen items)."""
+class ItemMajority(_GroupMajority):
+    """Baseline: the item's most common fit label (does this dress run small/large?)."""
 
     key = ITEM_KEY
 
 
-class UserMean(_GroupMean):
-    """Baseline: the user's average rating (global mean for unseen users)."""
+class UserMajority(_GroupMajority):
+    """Baseline: the user's most common fit label (does this customer size down/up?)."""
 
     key = USER_KEY
 
 
-# TODO(B): latent-factor / similarity-based model from the course.
-# TODO(C): stronger model (e.g. text features, item2vec, temporal, BPR...).
+# TODO(B): logistic regression on features (size, height, weight, bust, category, body type...).
+# TODO(B): latent "true size" model in the spirit of Misra et al. 2018 (user/item size parameters).
+# TODO(C): stronger model, e.g. review-text features (tf-idf) or class-weighted / ordinal models.
