@@ -1,0 +1,23 @@
+# Python / environments
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Data is shared via Google Drive, never committed (see data/README.md)
+data/*
+!data/README.md
+
+# Large outputs
+*.mp4
+*.mov
+results/cache/
+
+# OS / editor
+.DS_Store
+.vscode/
+.envrc
+.direnv/
+.claude/
+CLAUDE.md
