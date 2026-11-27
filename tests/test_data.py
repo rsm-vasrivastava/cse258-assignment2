@@ -38,6 +38,11 @@ def test_clean_missing_fields_become_none():
         assert row[key] is None
 
 
+@pytest.mark.parametrize("age,expected", [("0", None), ("13", None), ("14", 14), ("90", 90), ("117", None)])
+def test_implausible_ages_become_missing(age, expected):
+    assert data.clean({**RAW, "age": age})["age"] == expected
+
+
 @pytest.mark.parametrize("s,expected", [("5' 0\"", 60.0), ("6'", 72.0), ("bad", None), (None, None)])
 def test_parse_height(s, expected):
     assert data.parse_height(s) == expected

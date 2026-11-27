@@ -23,6 +23,7 @@ TARGET_KEY = "fit"
 FIT_LABELS = ["small", "fit", "large"]  # ordered: too small < fits < too large
 
 SEED = 0
+AGE_RANGE = (14, 90)  # outside this is a data-entry error (ages 0-9 and 91-117 occur)
 
 
 def _parse_line(line):
@@ -92,12 +93,15 @@ def clean(row):
     """Return a new dict with numeric fields parsed; the original keys are kept."""
     out = dict(row)
     band, cup = parse_bust(row.get("bust size"))
+    age = parse_number(row.get("age"), int)
+    if age is not None and not AGE_RANGE[0] <= age <= AGE_RANGE[1]:
+        age = None
     out.update(
         weight_lbs=parse_weight(row.get("weight")),
         height_in=parse_height(row.get("height")),
         bust_band=band,
         bust_cup=cup,
-        age=parse_number(row.get("age"), int),
+        age=age,
         size=parse_number(row.get("size"), int),
         rating=parse_number(row.get("rating"), int),  # 2..10 in steps of 2
         review_date=parse_date(row.get("review_date")),
