@@ -1,90 +1,78 @@
-# CSE 158/258 — Assignment 2: Predicting Clothing Fit (RentTheRunway)
+# CSE 158/258 — Assignment 2: Will It Fit? Predicting Clothing Fit on RentTheRunway
 
-**Task:** Given a customer and a rented item, predict whether it fits: **small / fit / large** (3-class classification).
-**Dataset:** RentTheRunway clothing fit data, ~192k rentals (Misra, Wan & McAuley, RecSys 2018) — see `data/README.md`.
-**Headline metric:** Macro-F1 (≈74% of rentals are "fit", so accuracy alone rewards always predicting "fit"). Also report accuracy and per-class F1.
+**Task:** Before a customer rents a garment in a given size, predict whether it will be reported **small / fit / large** (3-class classification).
+**Dataset:** RentTheRunway clothing fit data, 192,544 rentals (Misra, Wan & McAuley, RecSys 2018). See `data/README.md`.
 **Team:** Ansh, Chloe, Harshitha, Vanshika
 
-Deliverables (due Tuesday of week 10 — check Gradescope for the exact time):
-- `workbook.html` — `notebooks/workbook.ipynb`, fully run, exported to HTML
-- `video_url.txt` — Google Drive ("anyone with the link") or YouTube link to a ~20 min mp4
+## Results (held-out test set, 19,254 rentals)
 
-## Who does what
-
-| | Owns (code) | Notebook | Presents (video) |
+| Model | Avg AUC | Macro-F1 | Accuracy |
 |---|---|---|---|
-| **Ansh** | `src/a2/data.py` — cleaning, feature parsing, the shared split | `notebooks/ansh_eda.ipynb` | §2 Data & EDA: source, cleaning, missing values, label imbalance, fit vs. size/category/body type, sparsity |
-| **Chloe** | `src/a2/evaluate.py` + baselines and course models in `src/a2/models.py` | `notebooks/chloe_baselines.ipynb` | §3–4 (part 1): majority / item / user baselines, logistic regression on features, latent "true size" model; why Macro-F1 |
-| **Harshitha** | Stronger model in `src/a2/models.py` | `notebooks/harshitha_model.ipynb` | §3–4 (part 2): review-text (TF-IDF) model, class imbalance handling, final test-set comparison, error analysis |
-| **Vanshika** | Repo, PR reviews, final `workbook.ipynb`, export | `notebooks/workbook.ipynb` | §1 Task framing + §5 Related work; intro/outro; slides and video editing |
+| **Gradient boosting (profile + history)** | **0.775** | **0.567** | 0.699 |
+| Logistic regression (profile + history) | 0.764 | 0.563 | 0.710 |
+| Item fit history (baseline) | 0.744 | 0.542 | 0.708 |
+| 1-LV latent size (Sembium et al. 2017) | 0.711 | 0.513 | 0.670 |
+| Logistic regression (profile only) | 0.612 | 0.419 | 0.618 |
+| User fit history (baseline) | 0.537 | 0.371 | 0.589 |
+| Majority class ("fit") | 0.500 | 0.283 | 0.736 |
+| *Review text, post-hoc only (not available before the rental)* | *0.854* | *0.688* | *0.803* |
 
-Rough video split (~20 min): Vanshika §1 (3 min) · Ansh §2 (4–5 min) · Chloe §3–4 (5 min) · Harshitha §3–4 (5 min) · Vanshika §5 + wrap-up (3 min).
+Full analysis, charts, bootstrap CIs, cold-start breakdown and related work: **`workbook.html`** (rendered) / `notebooks/workbook.ipynb`.
 
-**Cross-checks:** Chloe reviews Ansh's PRs, Harshitha reviews Chloe's, Ansh reviews Harshitha's, everyone reviews Vanshika's workbook. Everyone should be able to explain every part.
+## Deliverables (due Tuesday of week 10; check Gradescope)
+- [x] `workbook.html`: `notebooks/workbook.ipynb`, executed and exported (passes the autograder's `<!DOCTYPE html>` check)
+- [ ] `video_url.txt`: Google Drive ("Anyone with the link") or YouTube link to the ~20 min mp4. See `slides/presentation_outline.md`
 
-## Setup (once)
+## Who presents what
+
+| | Section | Notebook part |
+|---|---|---|
+| **Vanshika** | §1 Predictive task · §5 Related work + conclusions | §1, §5 |
+| **Ansh** | §2 Data, EDA, preprocessing | §2 |
+| **Chloe** | §3–4 part 1: baselines, 1-LV, logistic regression, metrics & decision weights | §3 (1-LV, fitting), §4 tables |
+| **Harshitha** | §3–4 part 2: features, gradient boosting, significance, cold start, errors, text | §3 (features), §4 rest |
+
+Talking points per slide: `slides/presentation_outline.md`. Before recording, each person should read their part of `src/a2/` and be able to explain it.
+
+## Setup
 
 ```bash
 git clone https://github.com/rsm-vasrivastava/cse258-assignment2.git
 cd cse258-assignment2
 uv sync                 # creates .venv with identical packages for everyone
-uv run pytest           # should be all green
+uv run pytest           # 60 tests, all should pass
 ```
 
 Download the data into `data/` (see `data/README.md`). In VS Code / Jupyter, select the
 kernel at `cse258-assignment2/.venv/bin/python`.
 
-Add a package: `uv add <name>` (commit `pyproject.toml` and `uv.lock` together).
-
 ## Layout
 
 ```
-src/a2/data.py       load_dataset(), clean(), split(), targets(), FIT_LABELS   (Ansh)
-src/a2/evaluate.py   accuracy, f1_per_class, macro_f1, report(), results_table() (Chloe)
-src/a2/models.py     MajorityClass, ItemMajority, UserMajority, + new models   (Chloe, Harshitha)
-notebooks/           one notebook per person + workbook.ipynb (final)
-tests/               a quick check for every function in src/
+src/a2/data.py       load + clean (parsers for weight/height/bust/age...), fixed-seed 80/10/10 split
+src/a2/features.py   FeatureBuilder: profile features + out-of-fold history features
+src/a2/models.py     MajorityClass, ItemMajority, UserMajority, LatentSize (1-LV),
+                     LogisticFit, GBMFit, TextFit, all with fit() / predict_proba()
+src/a2/evaluate.py   Avg AUC, Macro-F1, per-class F1, decision-weight tuning, paired bootstrap CI
+tests/               60 unit tests (incl. finite-difference gradient check for 1-LV)
+notebooks/workbook.ipynb   the submission notebook (5 sections)
+workbook.html        exported submission
+slides/              presentation outline
 data/                local only, never committed
-slides/              slide exports (not the video)
 ```
 
-Every model has the same interface, so they all drop into one results table:
-
-```python
-from a2.data import load_dataset, split, targets
-from a2.evaluate import report, results_table
-from a2.models import MajorityClass
-
-train, valid, test = split(load_dataset())
-m = MajorityClass().fit(train)
-results_table([report("Majority", targets(valid), m.predict(valid))])
-```
-
-## How we work together
-
-1. **Never edit someone else's notebook.** Notebooks merge badly. Shared logic goes in `src/a2/`.
-2. **One branch per piece of work:** `git switch -c <name>/<topic>` (e.g. `ansh/eda`).
-3. **Start of each session:** `git switch main && git pull`, then `git switch <branch> && git merge main`.
-4. **Push often; open a Pull Request** into `main` when something works; your reviewer (above) reads it before merging.
-5. **Before pushing a notebook:** Kernel → Restart & Clear All Output, so diffs stay small.
-6. **Tune on `valid`; touch `test` once** — only for the final results table.
-7. **Every new function in `src/` gets a test** in `tests/`; run `uv run pytest` before pushing.
-8. **Don't commit data, videos, or secrets.**
-
-## Timeline
-
-| When | Goal | Who |
-|---|---|---|
-| Day 1 | Everyone set up + data downloaded; Ansh confirms `clean()` on real data | all / Ansh |
-| Days 2–4 | Parallel work on own branch; first results by day 3 | all |
-| Day 4 | Related-work notes + slide template | Vanshika |
-| Day 5 | Results frozen; final test-set table; workbook assembled and exported | Chloe, Harshitha → Vanshika |
-| Day 6 | Each person records their section | all |
-| Day 7 | Video edited, uploaded, `video_url.txt` + `workbook.html` submitted | Vanshika |
-
-## Export the workbook
+## Reproduce / re-export
 
 ```bash
-uv run jupyter nbconvert --to html --execute notebooks/workbook.ipynb --output-dir . --output workbook
+uv run jupyter nbconvert --to notebook --execute --inplace notebooks/workbook.ipynb   # ~4 min
+uv run jupyter nbconvert --to html notebooks/workbook.ipynb --output-dir . --output workbook
 head -c 15 workbook.html    # must print <!DOCTYPE html>
 ```
+
+All results are deterministic (fixed seeds), so re-running reproduces the numbers above.
+
+## Working on it
+1. Shared logic goes in `src/a2/` with a test in `tests/`; run `uv run pytest` before pushing.
+2. Branch per change (`git switch -c <name>/<topic>`), open a PR, and have a teammate review it.
+3. Tune on validation; the test set is scored once, in the notebook.
+4. Don't commit data, videos or secrets.
