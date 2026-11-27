@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 from a2 import evaluate
@@ -24,7 +25,45 @@ def test_bad_inputs_raise(y, p):
         evaluate.accuracy(y, p)
 
 
-def test_report_and_table_sorted_by_macro_f1():
-    rows = [evaluate.report("always fit", Y, ["fit"] * 4), evaluate.report("perfect", Y, Y)]
-    assert set(rows[0]) == {"model", "Macro-F1", "Accuracy", "F1 small", "F1 fit", "F1 large"}
+# ---------- probabilistic metrics ----------
+# column order is FIT_LABELS = small, fit, large
+
+def test_average_auc_perfect_and_constant():
+    perfect = np.array([[0, 1, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1]], dtype=float)
+    assert evaluate.average_auc(Y, perfect) == pytest.approx(1.0)
+    constant = np.full((4, 3), 1 / 3)
+    assert evaluate.average_auc(Y, constant) == pytest.approx(0.5)
+
+
+def test_average_auc_known_value():
+    # "small" column ranks the small row 2nd of 4 -> AUC_small = 2/3 ; others perfect
+    p = np.array([[0.9, 0.9, 0.0], [0.1, 0.8, 0.0], [0.5, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    assert evaluate.average_auc(Y, p) == pytest.approx((2 / 3 + 1 + 1) / 3)
+
+
+def test_average_auc_shape_mismatch_raises():
+    with pytest.raises(ValueError):
+        evaluate.average_auc(Y, np.ones((3, 3)))
+
+
+def test_decide_applies_class_weights():
+    p = np.array([[0.3, 0.6, 0.1]])
+    assert evaluate.decide(p) == ["fit"]
+    assert evaluate.decide(p, weights=(3.0, 1.0, 1.0)) == ["small"]
+
+
+def test_tune_weights_beats_argmax_on_imbalanced_scores():
+    # minority classes never win argmax, but rank correctly -> tuning should recover them
+    y = ["fit"] * 6 + ["small", "large"]
+    p = np.array([[0.1, 0.8, 0.1]] * 6 + [[0.35, 0.6, 0.05], [0.05, 0.6, 0.35]])
+    assert evaluate.macro_f1(y, evaluate.decide(p)) < 0.5
+    w = evaluate.tune_weights(y, p)
+    assert evaluate.macro_f1(y, evaluate.decide(p, w)) == pytest.approx(1.0)
+
+
+def test_report_with_proba_and_table_sorted():
+    proba = np.full((4, 3), 1 / 3)
+    rows = [evaluate.report("always fit", Y, ["fit"] * 4, proba), evaluate.report("perfect", Y, Y)]
+    assert set(rows[0]) == {"model", "Avg AUC", "Macro-F1", "Accuracy", "F1 small", "F1 fit", "F1 large"}
+    assert np.isnan(rows[1]["Avg AUC"])
     assert list(evaluate.results_table(rows)["model"]) == ["perfect", "always fit"]
