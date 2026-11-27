@@ -86,6 +86,20 @@ def tune_weights(y_true, proba, grid=DEFAULT_GRID, labels=FIT_LABELS):
     return best_w
 
 
+def bootstrap_auc_difference(y_true, proba_a, proba_b, n_boot=1000, alpha=0.05, seed=0, labels=FIT_LABELS):
+    """Paired bootstrap (1 - alpha) interval for Avg AUC(a) - Avg AUC(b) on the same rows.
+    If the interval excludes 0, model a is reliably better than b on this data."""
+    y = np.asarray(list(y_true))
+    a, b = np.asarray(proba_a), np.asarray(proba_b)
+    rng = np.random.default_rng(seed)
+    diffs = []
+    for _ in range(n_boot):
+        idx = rng.integers(0, len(y), len(y))
+        diffs.append(average_auc(y[idx], a[idx], labels) - average_auc(y[idx], b[idx], labels))
+    lo, hi = np.quantile(diffs, [alpha / 2, 1 - alpha / 2])
+    return float(lo), float(hi)
+
+
 def report(name, y_true, y_pred, proba=None, labels=FIT_LABELS):
     """One results-table row: model, Avg AUC (NaN without proba), Macro-F1, Accuracy, F1 per class."""
     row = {

@@ -61,6 +61,18 @@ def test_tune_weights_beats_argmax_on_imbalanced_scores():
     assert evaluate.macro_f1(y, evaluate.decide(p, w)) == pytest.approx(1.0)
 
 
+def test_paired_bootstrap_difference():
+    rng = np.random.default_rng(0)
+    y = list(rng.choice(["small", "fit", "large"], 400, p=[0.15, 0.7, 0.15]))
+    onehot = np.array([[c == lab for lab in ["small", "fit", "large"]] for c in y], dtype=float)
+    good = 0.7 * onehot + 0.3 * rng.random((400, 3))
+    noise = rng.random((400, 3))
+    lo, hi = evaluate.bootstrap_auc_difference(y, good, noise, n_boot=200)
+    assert 0 < lo < hi  # clearly better -> interval excludes 0
+    lo, hi = evaluate.bootstrap_auc_difference(y, good, good, n_boot=50)
+    assert lo == pytest.approx(0) and hi == pytest.approx(0)
+
+
 def test_report_with_proba_and_table_sorted():
     proba = np.full((4, 3), 1 / 3)
     rows = [evaluate.report("always fit", Y, ["fit"] * 4, proba), evaluate.report("perfect", Y, Y)]
